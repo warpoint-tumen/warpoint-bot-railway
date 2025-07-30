@@ -1,11 +1,14 @@
 import os
 import firebase_admin
+import json
 from firebase_admin import credentials, db
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = os.environ.get("BOT_TOKEN")
-cred = credentials.Certificate("serviceAccountKey.json")
+
+firebase_credentials = json.loads(os.environ['FIREBASE_CREDENTIALS'])
+cred = credentials.Certificate(firebase_credentials)
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://warpointbot-default-rtdb.firebaseio.com'
 })
