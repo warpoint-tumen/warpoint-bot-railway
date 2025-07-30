@@ -25,7 +25,7 @@ async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "📝 Задачи на сегодня (30.07.2025):"
 
     for i, (key, value) in enumerate(tasks.items(), 1):
-        msg += f"{i}. {value['text']} — [{value['status']}]
+        msg += f"{i}. {value['text']} — [{value['status']}]\n"
 
     await update.message.reply_text(msg)
 
