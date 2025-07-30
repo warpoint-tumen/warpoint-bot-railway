@@ -5,7 +5,7 @@ from firebase_admin import credentials, db
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN = os.environ.get("TOKEN")
 
 firebase_credentials = json.loads(os.environ['FIREBASE_CREDENTIALS'])
 cred = credentials.Certificate(firebase_credentials)
