@@ -1,118 +1,88 @@
 
-import logging
 import os
-import random
-import datetime
+import json
+import firebase_admin
+from firebase_admin import credentials, firestore
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
+# Firebase setup
+cred = credentials.Certificate("warpointbot-firebase-adminsdk-fbsvc-4977f09b54.json")
+firebase_admin.initialize_app(cred)
+db = firestore.client()
+TASKS_COLLECTION = "tasks"
+
 TOKEN = os.getenv("TOKEN")
 
-tasks = [
-    "📞 Обзвон электриков (5 встреч)",
-    "🤝 Встреча с инженером по пожарной безопасности",
-    "🧹 Подмести полы в зоне отдыха"
-]
+def fetch_tasks():
+    docs = db.collection(TASKS_COLLECTION).stream()
+    return {doc.id: doc.to_dict().get("status", "не начато") for doc in docs}
 
-tasks_status = {i + 1: "не начато" for i in range(len(tasks))}
-completed_history = []
-evaluation_log = []
-future_tasks = []
+def add_task(text, status="не начато"):
+    db.collection(TASKS_COLLECTION).document(text).set({"status": status})
 
-motivational_quotes = [
-    "Даже самая длинная дорога начинается с первого шага.",
-    "Сегодняшние усилия — это завтрашние победы!",
-    "Каждый день — шанс стать лучше, чем вчера."
-]
+def update_task_status(task_text, status):
+    db.collection(TASKS_COLLECTION).document(task_text).update({"status": status})
 
-logging.basicConfig(level=logging.INFO)
+def format_task_list(tasks):
+    if not tasks:
+        return "Нет задач."
+    return "\n".join([f"{i}. {task} — [{status}]" for i, (task, status) in enumerate(tasks.items(), 1)])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"Ваш chat_id: {update.effective_chat.id}")
-    keyboard = [
-        ["📋 Задачи на сегодня", "📆 Завтра"],
-        ["🤖 AI-режим", "📊 Статистика"],
-        ["➕ Добавить задачу", "⭐ Оценить день"],
-        ["ℹ️ Справка"]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("Привет, Тумэн Баярович! Я снова с тобой 💪", reply_markup=reply_markup)
+    keyboard = [["📋 Задачи", "➕ Добавить задачу"]]
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.message.reply_text("Привет, Тумэн Баярович! Я читаю задачи из Firebase 🧠", reply_markup=markup)
 
-async def tasks_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    today = datetime.date.today().strftime("%d.%m.%Y")
-    msg = f"📋 Задачи на сегодня ({today}):\n"
-    for i, task in enumerate(tasks, 1):
-        msg += f"{i}. {task} — [{tasks_status[i]}]\n"
-    await update.message.reply_text(msg)
+async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tasks = fetch_tasks()
+    await update.message.reply_text(format_task_list(tasks))
 
-async def show_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if future_tasks:
-        msg = "📆 План на завтра:\n"
-        for i, task in enumerate(future_tasks, 1):
-            msg += f"{i}. {task}\n"
-        await update.message.reply_text(msg)
-    else:
-        await update.message.reply_text("План на завтра пока не составлен.")
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message.text.strip()
 
-async def show_ai_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    quote = random.choice(motivational_quotes)
-    done = sum(1 for s in tasks_status.values() if s == "выполнено")
-    total = len(tasks)
-    percent = int(done / total * 100) if total else 0
-    await update.message.reply_text(f"🧠 Мотивация: {quote}\nСегодня: {done}/{total} задач ({percent}%)")
-
-async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    done = sum(1 for _, _ in completed_history)
-    postponed = sum(1 for s in tasks_status.values() if s == "перенесено")
-    in_progress = sum(1 for s in tasks_status.values() if s == "в процессе")
-    await update.message.reply_text(f"📊 Статистика:\n✅ Выполнено: {done}\n🔁 Перенесено: {postponed}\n🟡 В процессе: {in_progress}")
-
-async def update_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message.text.strip().lower()
-    if msg == "📋 задачи на сегодня":
-        await tasks_today(update, context)
-        return
-    if msg == "📆 завтра":
-        await show_tomorrow(update, context)
-        return
-    if msg == "🤖 ai-режим":
-        await show_ai_mode(update, context)
-        return
-    if msg == "📊 статистика":
-        await show_stats(update, context)
-        return
-    if msg == "➕ добавить задачу":
-        await update.message.reply_text("Напиши новую задачу в формате: /v_zavtra Текст задачи")
-        return
-    if msg == "⭐ оценить день":
-        await update.message.reply_text("Оцени день по шкале от 1 до 5:")
-        return
-    if msg == "ℹ️ справка":
-        await update.message.reply_text("Доступные команды:\n/tasks — задачи на сегодня\n/zavtra — план на завтра\n/ai — AI-режим\n/stats — статистика\n/v_zavtra [текст] — добавить задачу на завтра")
+    if msg == "📋 Задачи":
+        await list_tasks(update, context)
         return
 
-    parts = msg.split("-")
-    if len(parts) == 2:
+    if msg == "➕ Добавить задачу":
+        await update.message.reply_text("Напиши новую задачу в формате: /добавить Текст задачи")
+        return
+
+    if msg.startswith("/добавить "):
+        text = msg.replace("/добавить ", "").strip()
+        if text:
+            add_task(text)
+            await update.message.reply_text(f"Задача добавлена: {text}")
+        return
+
+    if "-" in msg:
         try:
-            num = int(parts[0].strip())
-            action = parts[1].strip()
-            if num in tasks_status:
-                if "начал" in action:
-                    tasks_status[num] = "в процессе"
-                elif "готово" in action:
-                    tasks_status[num] = "выполнено"
-                    completed_history.append((datetime.datetime.now(), tasks[num - 1]))
-                elif "перенос" in action:
-                    tasks_status[num] = "перенесено"
-                await update.message.reply_text(f"Обновлено: {num}. {tasks[num - 1]} — [{tasks_status[num]}]")
+            num, action = msg.split("-")
+            num = int(num.strip())
+            action = action.strip().lower()
+            tasks = list(fetch_tasks().items())
+            key = tasks[num - 1][0]
+            if "начал" in action:
+                update_task_status(key, "в процессе")
+            elif "готово" in action:
+                update_task_status(key, "выполнено")
+            elif "перенос" in action:
+                update_task_status(key, "перенесено")
+            await update.message.reply_text(f"Статус задачи обновлён: {key}")
         except:
-            pass
+            await update.message.reply_text("Не удалось обновить задачу. Проверь формат.")
+        return
+
+async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"Ошибка: {context.error}")
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), update_status))
-    print("Бот запущен...")
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    app.add_error_handler(error)
+    print("Бот запущен с Firebase...")
     app.run_polling()
 
 if __name__ == "__main__":
