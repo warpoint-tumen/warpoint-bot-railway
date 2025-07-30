@@ -23,10 +23,10 @@ async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Задачи на сегодня не найдены.")
         return
     msg = "📝 Задачи на сегодня (30.07.2025):"
-"
+
     for i, (key, value) in enumerate(tasks.items(), 1):
         msg += f"{i}. {value['text']} — [{value['status']}]
-"
+
     await update.message.reply_text(msg)
 
 def main():
